@@ -1,4 +1,4 @@
-![Free Gemini API Banner](assets/banner.png)
+![Free Gemini API Banner](assets/banner.png?v=3)
 
 # 🔓 Free Gemini API (Go & WebSocket Session Bridge)
 
