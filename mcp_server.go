@@ -216,13 +216,13 @@ func callTool(toolName string, args PromptArg) (*CallToolResult, error) {
 
 		if imagePath != "" {
 			log.Printf("Image reference specified: %s. Using multipart upload...", imagePath)
-			resp, err = postMultipart(apiURL+"/chat", args.Prompt, "mcp_client_"+toolName, true, imagePath)
+			resp, err = postMultipart(apiURL+"/chat", args.Prompt, "mcp_client_chat", false, imagePath)
 		} else {
-			// Direct chat generation endpoint (with NewChat=true to isolate request)
+			// Direct chat generation endpoint (with NewChat=false to continue active request)
 			payload := map[string]interface{}{
 				"prompt":   args.Prompt,
-				"user_id":  "mcp_client_" + toolName,
-				"new_chat": true,
+				"user_id":  "mcp_client_chat",
+				"new_chat": false,
 			}
 			data, _ := json.Marshal(payload)
 			resp, err = client.Post(apiURL+"/chat", "application/json", bytes.NewBuffer(data))
