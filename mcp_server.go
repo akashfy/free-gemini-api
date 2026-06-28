@@ -38,6 +38,7 @@ type CallToolParams struct {
 type PromptArg struct {
 	Prompt         string `json:"prompt"`
 	RefImagePath   string `json:"ref_image_path,omitempty"`
+	RefVideoPath   string `json:"ref_video_path,omitempty"`
 	StartImagePath string `json:"start_image_path,omitempty"`
 }
 
@@ -144,7 +145,7 @@ func handleRequest(req JSONRPCRequest) {
 				},
 				{
 					"name":        "chat",
-					"description": "Chat with Gemini using a text prompt. Supports optional image analysis by passing ref_image_path.",
+					"description": "Chat with Gemini using a text prompt. Supports optional image/video analysis by passing ref_image_path or ref_video_path.",
 					"inputSchema": map[string]interface{}{
 						"type": "object",
 						"properties": map[string]interface{}{
@@ -155,6 +156,10 @@ func handleRequest(req JSONRPCRequest) {
 							"ref_image_path": map[string]interface{}{
 								"type":        "string",
 								"description": "Absolute path to a local image on the host to analyze (Image Analysis)",
+							},
+							"ref_video_path": map[string]interface{}{
+								"type":        "string",
+								"description": "Absolute path to a local video (.mp4) on the host to analyze (Video Analysis)",
 							},
 						},
 						"required": []string{"prompt"},
@@ -305,9 +310,16 @@ func callTool(toolName string, args PromptArg) (*CallToolResult, error) {
 		var resp *http.Response
 		var err error
 
+		mediaPath := ""
 		if args.RefImagePath != "" {
-			log.Printf("Image reference specified for chat: %s. Using multipart upload...", args.RefImagePath)
-			resp, err = postMultipart(apiURL+"/chat", args.Prompt, "mcp_client_chat", false, args.RefImagePath)
+			mediaPath = args.RefImagePath
+		} else if args.RefVideoPath != "" {
+			mediaPath = args.RefVideoPath
+		}
+
+		if mediaPath != "" {
+			log.Printf("Media reference specified for chat: %s. Using multipart upload...", mediaPath)
+			resp, err = postMultipart(apiURL+"/chat", args.Prompt, "mcp_client_chat", false, mediaPath)
 		} else {
 			payload := map[string]interface{}{
 				"prompt":   args.Prompt,
