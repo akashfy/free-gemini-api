@@ -165,6 +165,15 @@ func handleRequest(req JSONRPCRequest) {
 						"required": []string{"prompt"},
 					},
 				},
+				{
+					"name":        "reset_session",
+					"description": "Reset the active chat and generation session to start a fresh conversation.",
+					"inputSchema": map[string]interface{}{
+						"type": "object",
+						"properties": map[string]interface{}{},
+						"required": []string{},
+					},
+				},
 			},
 		}
 		sendResult(req.ID, result)
@@ -350,6 +359,29 @@ func callTool(toolName string, args PromptArg) (*CallToolResult, error) {
 		return &CallToolResult{
 			Content: []TextContent{
 				{Type: "text", Text: mresp.Text},
+			},
+		}, nil
+
+	case "reset_session":
+		payload := map[string]interface{}{
+			"user_id": "mcp_client_chat",
+		}
+		data, _ := json.Marshal(payload)
+
+		resp, err := client.Post(apiURL+"/reset", "application/json", bytes.NewBuffer(data))
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+
+		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode != 200 {
+			return nil, fmt.Errorf("API error: %s", string(body))
+		}
+
+		return &CallToolResult{
+			Content: []TextContent{
+				{Type: "text", Text: "🔄 Session successfully reset! The next messages will start a fresh conversation."},
 			},
 		}, nil
 
