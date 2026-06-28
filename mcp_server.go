@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"mime/multipart"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 )
 
@@ -34,7 +36,9 @@ type CallToolParams struct {
 }
 
 type PromptArg struct {
-	Prompt string `json:"prompt"`
+	Prompt         string `json:"prompt"`
+	RefImagePath   string `json:"ref_image_path,omitempty"`
+	StartImagePath string `json:"start_image_path,omitempty"`
 }
 
 type TextContent struct {
@@ -90,7 +94,7 @@ func handleRequest(req JSONRPCRequest) {
 			"tools": []map[string]interface{}{
 				{
 					"name":        "generate_image",
-					"description": "Generate an image using Imagen 3 from a text prompt",
+					"description": "Generate an image using Nano Banana 2 from a text prompt. Supports optional image-to-image (I2I) by passing ref_image_path.",
 					"inputSchema": map[string]interface{}{
 						"type": "object",
 						"properties": map[string]interface{}{
@@ -98,19 +102,27 @@ func handleRequest(req JSONRPCRequest) {
 								"type":        "string",
 								"description": "Detailed text description of the image to generate",
 							},
+							"ref_image_path": map[string]interface{}{
+								"type":        "string",
+								"description": "Absolute path to a local reference image on the host (Image-to-Image)",
+							},
 						},
 						"required": []string{"prompt"},
 					},
 				},
 				{
 					"name":        "generate_video",
-					"description": "Generate a short video using Gemini Video from a text prompt",
+					"description": "Generate a short video using Gemini Video. Supports optional image-to-video (I2V) by passing start_image_path.",
 					"inputSchema": map[string]interface{}{
 						"type": "object",
 						"properties": map[string]interface{}{
 							"prompt": map[string]interface{}{
 								"type":        "string",
 								"description": "Detailed text description of the video to generate",
+							},
+							"start_image_path": map[string]interface{}{
+								"type":        "string",
+								"description": "Absolute path to a local reference image on the host (Image-to-Video)",
 							},
 						},
 						"required": []string{"prompt"},
@@ -161,7 +173,7 @@ func handleRequest(req JSONRPCRequest) {
 			return
 		}
 
-		result, err := callTool(params.Name, args.Prompt)
+		result, err := callTool(params.Name, args)
 		if err != nil {
 			sendError(req.ID, -32603, fmt.Sprintf("Tool call failed: %v", err), nil)
 			return
@@ -174,8 +186,8 @@ func handleRequest(req JSONRPCRequest) {
 	}
 }
 
-func callTool(toolName, prompt string) (*CallToolResult, error) {
-	log.Printf("Executing tool %s with prompt: %s", toolName, prompt)
+func callTool(toolName string, args PromptArg) (*CallToolResult, error) {
+	log.Printf("Executing tool %s with prompt: %s", toolName, args.Prompt)
 
 	client := &http.Client{
 		Timeout: 5 * time.Minute,
@@ -183,15 +195,30 @@ func callTool(toolName, prompt string) (*CallToolResult, error) {
 
 	switch toolName {
 	case "generate_image", "generate_video":
-		// Direct chat generation endpoint (with NewChat=true to isolate request)
-		payload := map[string]interface{}{
-			"prompt":   prompt,
-			"user_id":  "mcp_client_" + toolName,
-			"new_chat": true,
-		}
-		data, _ := json.Marshal(payload)
+		var resp *http.Response
+		var err error
 
-		resp, err := client.Post(apiURL+"/chat", "application/json", bytes.NewBuffer(data))
+		imagePath := ""
+		if toolName == "generate_image" {
+			imagePath = args.RefImagePath
+		} else {
+			imagePath = args.StartImagePath
+		}
+
+		if imagePath != "" {
+			log.Printf("Image reference specified: %s. Using multipart upload...", imagePath)
+			resp, err = postMultipart(apiURL+"/chat", args.Prompt, "mcp_client_"+toolName, true, imagePath)
+		} else {
+			// Direct chat generation endpoint (with NewChat=true to isolate request)
+			payload := map[string]interface{}{
+				"prompt":   args.Prompt,
+				"user_id":  "mcp_client_" + toolName,
+				"new_chat": true,
+			}
+			data, _ := json.Marshal(payload)
+			resp, err = client.Post(apiURL+"/chat", "application/json", bytes.NewBuffer(data))
+		}
+
 		if err != nil {
 			return nil, err
 		}
@@ -228,7 +255,7 @@ func callTool(toolName, prompt string) (*CallToolResult, error) {
 
 	case "generate_music":
 		payload := map[string]interface{}{
-			"prompt":   prompt,
+			"prompt":   args.Prompt,
 			"user_id":  "mcp_client_music",
 			"new_chat": true,
 		}
@@ -272,7 +299,7 @@ func callTool(toolName, prompt string) (*CallToolResult, error) {
 
 	case "chat":
 		payload := map[string]interface{}{
-			"prompt":   prompt,
+			"prompt":   args.Prompt,
 			"user_id":  "mcp_client_chat",
 			"new_chat": false,
 		}
@@ -305,6 +332,54 @@ func callTool(toolName, prompt string) (*CallToolResult, error) {
 	default:
 		return nil, fmt.Errorf("unknown tool: %s", toolName)
 	}
+}
+
+func postMultipart(targetURL, prompt, userID string, newChat bool, imagePath string) (*http.Response, error) {
+	var b bytes.Buffer
+	w := multipart.NewWriter(&b)
+
+	// Add fields
+	if err := w.WriteField("prompt", prompt); err != nil {
+		return nil, err
+	}
+	if err := w.WriteField("user_id", userID); err != nil {
+		return nil, err
+	}
+	if newChat {
+		if err := w.WriteField("new_chat", "true"); err != nil {
+			return nil, err
+		}
+	}
+
+	// Add image if specified
+	if imagePath != "" {
+		file, err := os.Open(imagePath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open image: %w", err)
+		}
+		defer file.Close()
+
+		part, err := w.CreateFormFile("image", filepath.Base(imagePath))
+		if err != nil {
+			return nil, fmt.Errorf("failed to create form file: %w", err)
+		}
+		if _, err := io.Copy(part, file); err != nil {
+			return nil, fmt.Errorf("failed to copy file: %w", err)
+		}
+	}
+
+	if err := w.Close(); err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", targetURL, &b)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", w.FormDataContentType())
+
+	client := &http.Client{Timeout: 5 * time.Minute}
+	return client.Do(req)
 }
 
 func sendResult(id interface{}, result interface{}) {
