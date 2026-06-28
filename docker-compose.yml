@@ -1,0 +1,15 @@
+services:
+  free-gemini-api:
+    image: akashyadav758/free-gemini-api:latest
+    container_name: free-gemini-api
+    ports:
+      - "8001:8001" # Fiber HTTP API
+      - "9226:9226" # WebSocket Cookie Bridge
+    working_dir: /app/data
+    command: /app/main
+    volumes:
+      - gemini-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  gemini-data:
