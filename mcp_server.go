@@ -144,13 +144,17 @@ func handleRequest(req JSONRPCRequest) {
 				},
 				{
 					"name":        "chat",
-					"description": "Chat with Gemini using a text prompt",
+					"description": "Chat with Gemini using a text prompt. Supports optional image analysis by passing ref_image_path.",
 					"inputSchema": map[string]interface{}{
 						"type": "object",
 						"properties": map[string]interface{}{
 							"prompt": map[string]interface{}{
 								"type":        "string",
 								"description": "The message to send to Gemini",
+							},
+							"ref_image_path": map[string]interface{}{
+								"type":        "string",
+								"description": "Absolute path to a local image on the host to analyze (Image Analysis)",
 							},
 						},
 						"required": []string{"prompt"},
@@ -298,14 +302,22 @@ func callTool(toolName string, args PromptArg) (*CallToolResult, error) {
 		}, nil
 
 	case "chat":
-		payload := map[string]interface{}{
-			"prompt":   args.Prompt,
-			"user_id":  "mcp_client_chat",
-			"new_chat": false,
-		}
-		data, _ := json.Marshal(payload)
+		var resp *http.Response
+		var err error
 
-		resp, err := client.Post(apiURL+"/chat", "application/json", bytes.NewBuffer(data))
+		if args.RefImagePath != "" {
+			log.Printf("Image reference specified for chat: %s. Using multipart upload...", args.RefImagePath)
+			resp, err = postMultipart(apiURL+"/chat", args.Prompt, "mcp_client_chat", false, args.RefImagePath)
+		} else {
+			payload := map[string]interface{}{
+				"prompt":   args.Prompt,
+				"user_id":  "mcp_client_chat",
+				"new_chat": false,
+			}
+			data, _ := json.Marshal(payload)
+			resp, err = client.Post(apiURL+"/chat", "application/json", bytes.NewBuffer(data))
+		}
+
 		if err != nil {
 			return nil, err
 		}
