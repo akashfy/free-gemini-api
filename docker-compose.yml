@@ -1,7 +1,6 @@
 services:
   free-gemini-api:
-    build: .
-    image: akashyadav758/free-gemini-api:custom
+    image: akashyadav758/free-gemini-api:latest
     container_name: free-gemini-api
     ports:
       - "8002:8001" # Fiber HTTP API (Changed host port to 8002 to avoid conflict)
