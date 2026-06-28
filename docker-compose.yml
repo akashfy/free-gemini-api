@@ -9,6 +9,7 @@ services:
     command: /app/main
     volumes:
       - gemini-data:/app/data
+      - /Users:/Users:ro
     restart: unless-stopped
 
 volumes:
