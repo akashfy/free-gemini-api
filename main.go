@@ -167,8 +167,8 @@ func startWebSocketBridge() {
 }
 
 func main() {
-	if err := godotenv.Load("config"); err != nil {
-		log.Println("⚠️  No config file found")
+	if err := godotenv.Load("config.env"); err != nil {
+		log.Println("⚠️  No config.env file found")
 	}
 
 	startWebSocketBridge()
