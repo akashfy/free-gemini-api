@@ -62,7 +62,7 @@ type CallToolResult struct {
 
 const (
 	serverName    = "free-gemini-mcp"
-	serverVersion = "2.0.0"
+	serverVersion = "2.1.0"
 
 	maxRetries    = 3
 	baseRetryWait = 2 * time.Second
@@ -177,7 +177,7 @@ func handleRequest(req JSONRPCRequest) {
 			return
 		}
 
-		if args.Prompt == "" && params.Name != "reset_session" && params.Name != "get_flow_credits" {
+		if args.Prompt == "" && params.Name != "reset_session" && params.Name != "check_health" {
 			sendResult(req.ID, &CallToolResult{
 				Content: []TextContent{{Type: "text", Text: "❌ Error: 'prompt' is required but was empty."}},
 				IsError: true,
@@ -214,7 +214,7 @@ func getToolDefinitions() map[string]interface{} {
 	return map[string]interface{}{
 		"tools": []map[string]interface{}{
 			{
-				"name":        "generate_flow_image",
+				"name":        "generate_image",
 				"description": "Generate a high-quality image using Google Gemini's Imagen 3 (Nano Banana 2) from a detailed text prompt. The generated image is automatically cleaned of watermarks. Supports optional Image-to-Image (I2I) by providing a local reference image path.",
 				"inputSchema": map[string]interface{}{
 					"type": "object",
@@ -232,7 +232,7 @@ func getToolDefinitions() map[string]interface{} {
 				},
 			},
 			{
-				"name":        "generate_flow_video",
+				"name":        "generate_video",
 				"description": "Generate a short cinematic video (2-10 seconds) using Google Gemini Video from a text prompt. Supports optional Image-to-Video (I2V) by providing a starting image. Video generation may take 1-3 minutes.",
 				"inputSchema": map[string]interface{}{
 					"type": "object",
@@ -250,7 +250,7 @@ func getToolDefinitions() map[string]interface{} {
 				},
 			},
 			{
-				"name":        "generate_flow_music",
+				"name":        "generate_music",
 				"description": "Generate a short music beat or song using YouTube Lyria from a text prompt. Produces high-fidelity audio output.",
 				"inputSchema": map[string]interface{}{
 					"type": "object",
@@ -264,7 +264,7 @@ func getToolDefinitions() map[string]interface{} {
 				},
 			},
 			{
-				"name":        "upload_flow_media",
+				"name":        "chat",
 				"description": "Chat with Google Gemini using a text prompt. Supports optional multimodal analysis by attaching a local image or video file for Gemini to analyze, describe, or use as context.",
 				"inputSchema": map[string]interface{}{
 					"type": "object",
@@ -286,7 +286,16 @@ func getToolDefinitions() map[string]interface{} {
 				},
 			},
 			{
-				"name":        "get_flow_credits",
+				"name":        "reset_session",
+				"description": "Reset the active chat and generation session to start a fresh conversation.",
+				"inputSchema": map[string]interface{}{
+					"type":       "object",
+					"properties": map[string]interface{}{},
+					"required":   []string{},
+				},
+			},
+			{
+				"name":        "check_health",
 				"description": "Check if the Gemini API backend is healthy and responsive. Returns the connection status.",
 				"inputSchema": map[string]interface{}{
 					"type":       "object",
@@ -305,16 +314,19 @@ func callTool(toolName string, args PromptArg) (*CallToolResult, error) {
 
 	switch toolName {
 
-	case "generate_flow_image", "generate_flow_video":
+	case "generate_image", "generate_video":
 		return handleMediaGeneration(toolName, args)
 
-	case "generate_flow_music":
+	case "generate_music":
 		return handleMusicGeneration(args)
 
-	case "upload_flow_media":
+	case "chat":
 		return handleChat(args)
 
-	case "get_flow_credits":
+	case "reset_session":
+		return handleResetSession()
+
+	case "check_health":
 		return handleHealthCheck()
 
 	default:
@@ -326,7 +338,7 @@ func callTool(toolName string, args PromptArg) (*CallToolResult, error) {
 
 func handleMediaGeneration(toolName string, args PromptArg) (*CallToolResult, error) {
 	var imagePath string
-	if toolName == "generate_flow_image" {
+	if toolName == "generate_image" {
 		imagePath = args.RefImagePath
 	} else {
 		imagePath = args.StartImagePath
@@ -375,7 +387,7 @@ func handleMediaGeneration(toolName string, args PromptArg) (*CallToolResult, er
 	}
 
 	var msg string
-	if toolName == "generate_flow_image" && len(mresp.Images) > 0 {
+	if toolName == "generate_image" && len(mresp.Images) > 0 {
 		msg = fmt.Sprintf("🎨 Image generated successfully!\nURL: %s", mresp.Images[0])
 		if len(mresp.Images) > 1 {
 			msg += "\n\nAdditional images:"
@@ -383,7 +395,7 @@ func handleMediaGeneration(toolName string, args PromptArg) (*CallToolResult, er
 				msg += fmt.Sprintf("\n  %d. %s", i+2, img)
 			}
 		}
-	} else if toolName == "generate_flow_video" && len(mresp.Videos) > 0 {
+	} else if toolName == "generate_video" && len(mresp.Videos) > 0 {
 		msg = fmt.Sprintf("🎬 Video generated successfully!\nURL: %s", mresp.Videos[0])
 	} else {
 		msg = fmt.Sprintf("⚠️ Request processed but no media URL was returned.\nGemini replied: %s", mresp.Text)
@@ -510,6 +522,33 @@ func handleChat(args PromptArg) (*CallToolResult, error) {
 
 	return &CallToolResult{
 		Content: []TextContent{{Type: "text", Text: msg}},
+	}, nil
+}
+
+// ─── Reset Session ────────────────────────────────────────────────────────────
+
+func handleResetSession() (*CallToolResult, error) {
+	client := &http.Client{Timeout: 10 * time.Second}
+	payload := map[string]interface{}{
+		"user_id": "mcp_client_chat",
+	}
+	data, _ := json.Marshal(payload)
+
+	resp, err := client.Post(apiURL+"/reset", "application/json", bytes.NewBuffer(data))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("API error: %s", string(body))
+	}
+
+	return &CallToolResult{
+		Content: []TextContent{
+			{Type: "text", Text: "🔄 Session successfully reset! The next messages will start a fresh conversation."},
+		},
 	}, nil
 }
 

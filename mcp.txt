@@ -1,4 +1,4 @@
-# 🔌 Gemini Flow MCP Server Setup Guide for AI Agents
+# 🔌 Gemini MCP Server Setup Guide for AI Agents
 
 To configure this local Gemini MCP server in your environment, follow the steps below.
 
@@ -9,7 +9,7 @@ Add the following config block to your IDE's global MCP configuration file (typi
 ```json
 {
   "mcpServers": {
-    "flow-agent": {
+    "gemini": {
       "command": "/Users/akash/My-work/free-gemini-api/gemini-mcp",
       "args": []
     }
@@ -30,29 +30,32 @@ Add the following config block to your IDE's global MCP configuration file (typi
 
 Once configured, the following tools will be available for you to use:
 
-1. **`generate_flow_image`**
+1. **`generate_image`**
    - **Description**: Generate high-quality images via Gemini Imagen 3 (Nano Banana 2) with auto-cleaned watermarks.
    - **Arguments**:
      - `prompt` (string, required): Detailed description of the image.
      - `ref_image_path` (string, optional): Local path to reference image for Image-to-Image (I2I).
 
-2. **`generate_flow_video`**
+2. **`generate_video`**
    - **Description**: Generate short cinematic videos (2-10 seconds) using Gemini Video.
    - **Arguments**:
      - `prompt` (string, required): Detailed video description.
      - `start_image_path` (string, optional): Local path to starting frame for Image-to-Video (I2V).
 
-3. **`generate_flow_music`**
+3. **`generate_music`**
    - **Description**: Generate high-fidelity music beats/lofi tracks using YouTube Lyria.
    - **Arguments**:
      - `prompt` (string, required): Music style/mood description.
 
-4. **`upload_flow_media`**
+4. **`chat`**
    - **Description**: Multimodal chat with Gemini supporting local image/video file analysis.
    - **Arguments**:
      - `prompt` (string, required): Message or question for Gemini.
      - `ref_image_path` (string, optional): Local image to analyze.
      - `ref_video_path` (string, optional): Local video (.mp4) to analyze.
 
-5. **`get_flow_credits`**
+5. **`reset_session`**
+   - **Description**: Reset the active chat session to start a fresh conversation.
+
+6. **`check_health`**
    - **Description**: Run a health check to verify if the backend API at `http://localhost:8002` is healthy and responding.
