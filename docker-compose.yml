@@ -1,5 +1,6 @@
 services:
   free-gemini-api:
+    build: .
     image: akashyadav758/free-gemini-api:latest
     container_name: free-gemini-api
     ports:
