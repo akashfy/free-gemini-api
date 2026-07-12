@@ -1,32 +1,41 @@
-# 🔓 Free Gemini API (Containerized Edition)
+# 🔓 Free Gemini API — Docker Setup
 
-A fully containerized, high-performance, OpenAI-compatible Go API server and MCP server that bridges requests to the Gemini Web UI via WebSocket cookie sync.
-
-This version is optimized to run inside **OrbStack / Docker** with **zero local host code dependencies**.
+Containerized Go API server running inside **OrbStack / Docker** with zero local dependencies.
 
 ---
 
-## 🚀 How to Run
+## 🚀 Run
 
-Start the container in the background:
 ```bash
 docker compose up -d
 ```
 
-Once started, the following services will be available:
-- **HTTP API**: `http://localhost:8001` (OpenAI-compatible endpoints)
-- **WebSocket Cookie Bridge**: `ws://localhost:9226` (For Chrome Extension to sync cookies)
+| Service | URL |
+|---|---|
+| HTTP API | `http://localhost:8002` |
+| WebSocket Cookie Bridge | `ws://localhost:9226` |
 
 ---
 
-## 🤖 MCP Server Configuration (Cursor / Claude Desktop)
+## 🤖 MCP Server Config
 
-To use the built-in MCP server directly inside Cursor or Claude Desktop, configure it to run through the Docker container:
-
+**Option 1 — Local binary (Recommended):**
 ```json
 {
   "mcpServers": {
-    "free-gemini": {
+    "flow-agent": {
+      "command": "/Users/akash/My-work/free-gemini-api/gemini-mcp",
+      "args": []
+    }
+  }
+}
+```
+
+**Option 2 — Via Docker exec:**
+```json
+{
+  "mcpServers": {
+    "flow-agent": {
       "command": "docker",
       "args": ["exec", "-i", "free-gemini-api", "/app/gemini-mcp"]
     }
@@ -36,7 +45,7 @@ To use the built-in MCP server directly inside Cursor or Claude Desktop, configu
 
 ---
 
-## 📁 Persistent Volumes
+## 📁 Volumes
 
-All temporary files, outputs, and active session cookies are stored inside the named Docker volume:
-- `gemini-data` (mounted inside the container at `/app/data`)
+- `gemini-data` → mounted at `/app/data` (cookies, outputs, temp files)
+- `/Users` → mounted read-only for local file access (image/video uploads)
