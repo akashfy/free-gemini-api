@@ -1,0 +1,18 @@
+# Binaries
+*.dylib
+*.so
+*.dll
+*.exe
+gemini-mcp
+main
+
+# Private session cookies (do not commit active Google credentials)
+cookies/*.json
+!cookies/.gitkeep
+
+# Generated output media
+output/
+
+# OS files
+.DS_Store
+Thumbs.db

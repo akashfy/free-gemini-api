@@ -6,6 +6,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -31,7 +33,6 @@ func BroadcastCookieRefresh() {
 
 	payload := map[string]string{"type": "trigger_sync"}
 
-	// We iterate backwards so we can safely remove disconnected clients
 	for i := len(activeClients) - 1; i >= 0; i-- {
 		conn := activeClients[i]
 		err := conn.WriteJSON(payload)
@@ -56,6 +57,44 @@ type ExtensionMessage struct {
 	Cookies []CookieObject `json:"cookies"`
 }
 
+// GetActiveWorkerCount returns number of connected Chrome Extension workers
+func GetActiveWorkerCount() int {
+	activeClientsMu.Lock()
+	defer activeClientsMu.Unlock()
+	return len(activeClients)
+}
+
+func getAccountIDFromCookies(cookies []CookieObject) string {
+	for _, c := range cookies {
+		if c.Name == "__Secure-1PSID" || c.Name == "SID" || c.Name == "HSID" {
+			cleanVal := regexp.MustCompile(`[^a-zA-Z0-9]`).ReplaceAllString(c.Value, "")
+			if len(cleanVal) > 10 {
+				return cleanVal[:10]
+			}
+			return cleanVal
+		}
+	}
+	return "primary"
+}
+
+// GetAvailableAccountCookieFiles returns paths of all active account cookie files
+func GetAvailableAccountCookieFiles() []string {
+	files, err := filepath.Glob(filepath.Join("cookies", "account_*.json"))
+	if err != nil || len(files) == 0 {
+		defaultPath := filepath.Join("cookies", "cookies.json")
+		if _, err := os.Stat(defaultPath); err == nil {
+			return []string{defaultPath}
+		}
+		return nil
+	}
+	return files
+}
+
+// GetActiveAccountCount returns the number of distinct account profiles saved
+func GetActiveAccountCount() int {
+	return len(GetAvailableAccountCookieFiles())
+}
+
 // StartCookieWebSocketServer starts a local WebSocket server to receive cookies from the extension
 func StartCookieWebSocketServer(port int) {
 	mux := http.NewServeMux()
@@ -68,7 +107,10 @@ func StartCookieWebSocketServer(port int) {
 
 		activeClientsMu.Lock()
 		activeClients = append(activeClients, conn)
+		count := len(activeClients)
 		activeClientsMu.Unlock()
+
+		log.Printf("🔌 Chrome Extension connected to cookie bridge (Active Workers: %d)", count)
 
 		defer func() {
 			conn.Close()
@@ -79,16 +121,14 @@ func StartCookieWebSocketServer(port int) {
 					break
 				}
 			}
+			remCount := len(activeClients)
 			activeClientsMu.Unlock()
-			log.Println("🔌 Chrome Extension disconnected")
+			log.Printf("🔌 Chrome Extension disconnected (Active Workers: %d)", remCount)
 		}()
-
-		log.Println("🔌 Chrome Extension connected to cookie bridge")
 
 		for {
 			_, msgBytes, err := conn.ReadMessage()
 			if err != nil {
-				log.Println("🔌 Chrome Extension disconnected")
 				break
 			}
 
@@ -104,19 +144,28 @@ func StartCookieWebSocketServer(port int) {
 			}
 
 			if msg.Type == "cookies_payload" && len(msg.Cookies) > 0 {
-				log.Printf("🍪 Received %d cookies from Chrome Extension", len(msg.Cookies))
+				accountID := getAccountIDFromCookies(msg.Cookies)
+				log.Printf("🍪 Received %d cookies for Account [%s] from Chrome Extension", len(msg.Cookies), accountID)
 
-				// Write to cookies.json
 				data, err := json.MarshalIndent(msg.Cookies, "", "  ")
 				if err != nil {
 					log.Printf("❌ Failed to marshal cookies: %v", err)
 					continue
 				}
 
-				if err := os.WriteFile("cookies.json", data, 0644); err != nil {
-					log.Printf("❌ Failed to save cookies.json: %v", err)
-					continue
+				os.MkdirAll("cookies", 0755)
+
+				// Save account-specific cookie file for multi-account pool
+				accountFilePath := filepath.Join("cookies", fmt.Sprintf("account_%s.json", accountID))
+				if err := os.WriteFile(accountFilePath, data, 0644); err != nil {
+					log.Printf("❌ Failed to save %s: %v", accountFilePath, err)
+				} else {
+					log.Printf("💾 Stored account profile: %s", accountFilePath)
 				}
+
+				// Also write to default cookies/cookies.json
+				defaultCookiePath := filepath.Join("cookies", "cookies.json")
+				_ = os.WriteFile(defaultCookiePath, data, 0644)
 
 				// Refresh CachedImageCookies
 				var parts []string
@@ -124,7 +173,6 @@ func StartCookieWebSocketServer(port int) {
 					parts = append(parts, fmt.Sprintf("%s=%s", ck.Name, ck.Value))
 				}
 				CachedImageCookies = strings.Join(parts, "; ")
-				log.Printf("🍪 Cached %d cookies for image/video downloading", len(msg.Cookies))
 
 				// Trigger callback to reload active sessions
 				if OnCookiesUpdated != nil {
@@ -136,7 +184,7 @@ func StartCookieWebSocketServer(port int) {
 
 	addr := fmt.Sprintf("0.0.0.0:%d", port)
 	log.Printf("📡 Cookie WebSocket Server listening on %s", addr)
-	
+
 	server := &http.Server{
 		Addr:    addr,
 		Handler: mux,
@@ -146,4 +194,3 @@ func StartCookieWebSocketServer(port int) {
 		log.Fatalf("❌ Cookie WebSocket Server failed: %v", err)
 	}
 }
-
