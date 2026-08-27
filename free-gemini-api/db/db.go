@@ -166,7 +166,7 @@ func SearchMessages(query string, limit int) ([]map[string]any, error) {
 		limit = 10
 	}
 	searchPattern := "%" + query + "%"
-	rows, err := DB.Query(`SELECT id, role, content, model, created_at FROM messages WHERE content LIKE ? ORDER BY id DESC LIMIT ?`, searchPattern, limit)
+	rows, err := DB.Query(`SELECT id, COALESCE(role, ''), COALESCE(content, ''), COALESCE(model, ''), COALESCE(created_at, '') FROM messages WHERE content LIKE ? ORDER BY id DESC LIMIT ?`, searchPattern, limit)
 	if err != nil {
 		return nil, err
 	}
