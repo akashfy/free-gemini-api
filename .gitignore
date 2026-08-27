@@ -5,24 +5,26 @@
 *.exe
 gemini-mcp
 gemini-api
+gemini-core
 main
 
-# Private session cookies (never commit active Google credentials)
-cookies/*.json
-!cookies/.gitkeep
+# Private session cookies
+**/cookies/*.json
+!**/cookies/.gitkeep
 
-# SQLite database
-data/*.db
-data/*.db-wal
-data/*.db-shm
+# SQLite databases
+**/*.db
+**/*.db-wal
+**/*.db-shm
 
 # Generated output media
-output/
-output/*
+**/output/
+**/output/*
 
 # Environment variables
 .env
 config.env
+**/.env
 
 # OS files
 .DS_Store

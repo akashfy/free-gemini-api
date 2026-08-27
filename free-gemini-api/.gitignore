@@ -1,0 +1,29 @@
+# Binaries
+*.dylib
+*.so
+*.dll
+*.exe
+gemini-mcp
+gemini-api
+main
+
+# Private session cookies (never commit active Google credentials)
+cookies/*.json
+!cookies/.gitkeep
+
+# SQLite database
+data/*.db
+data/*.db-wal
+data/*.db-shm
+
+# Generated output media
+output/
+output/*
+
+# Environment variables
+.env
+config.env
+
+# OS files
+.DS_Store
+Thumbs.db
