@@ -26,12 +26,10 @@ go run main.go
 * Cookie WebSocket Bridge: `ws://localhost:9226`
 
 ### 2. Install Chrome Extension (One-time Setup)
-1. Download or clone the standalone extension repository:
-   👉 **[kodelyx/gemini-extension](https://github.com/kodelyx/gemini-extension)**
-2. Open Chrome and navigate to `chrome://extensions/`
-3. Enable **Developer mode** (top right toggle)
-4. Click **Load unpacked** and select the `gemini-extension` folder
-5. Open [gemini.google.com](https://gemini.google.com) and log in — cookies sync automatically to `cookies/cookies.json`
+1. Open Chrome and navigate to `chrome://extensions/`
+2. Enable **Developer mode** (top right toggle)
+3. Click **Load unpacked** and select the `gemini-extension/` folder inside this repository
+4. Open [gemini.google.com](https://gemini.google.com) and log in — cookies sync automatically to `cookies/cookies.json`
 
 ### 3. Test OpenAI Endpoint with Tool Calling
 ```bash
