@@ -2,6 +2,7 @@ package main
 
 import (
 	"goapi/api"
+	"goapi/db"
 	"log"
 	"os"
 
@@ -19,6 +20,11 @@ func main() {
 	if len(os.Args) > 1 && (os.Args[1] == "--mcp" || os.Args[1] == "-mcp" || os.Args[1] == "mcp") {
 		api.RunMCPServer()
 		return
+	}
+
+	// Initialize SQLite Database
+	if _, err := db.InitDB(); err != nil {
+		log.Printf("⚠️ SQLite initialization warning: %v", err)
 	}
 
 	// Start Chrome Extension WebSocket bridge

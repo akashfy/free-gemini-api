@@ -1,7 +1,9 @@
 package api
 
 import (
+	"goapi/db"
 	"goapi/gemini"
+	"strconv"
 
 	"github.com/gofiber/fiber/v3"
 )
@@ -75,6 +77,80 @@ func RegisterRoutes(app *fiber.App) {
 			})
 		}
 		return c.JSON(fiber.Map{"session_id": sessionID, "active": false})
+	})
+
+	// SQLite History & Database endpoints
+	app.Get("/history", func(c fiber.Ctx) error {
+		convID := c.Query("conversation_id")
+		limitStr := c.Query("limit")
+		limit := 50
+		if limitStr != "" {
+			if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+				limit = l
+			}
+		}
+		history, err := db.GetRecentMessages(convID, limit)
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		}
+		return c.JSON(fiber.Map{"conversation_id": convID, "messages": history})
+	})
+
+	app.Get("/media", func(c fiber.Ctx) error {
+		if db.DB == nil {
+			return c.JSON(fiber.Map{"media": []any{}})
+		}
+		rows, err := db.DB.Query(`SELECT id, type, prompt, file_name, file_path, url, created_at FROM media_generations ORDER BY id DESC LIMIT 50`)
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		}
+		defer rows.Close()
+
+		var mediaList []fiber.Map
+		for rows.Next() {
+			var id int
+			var mType, prompt, fileName, filePath, urlStr, createdAt string
+			if err := rows.Scan(&id, &mType, &prompt, &fileName, &filePath, &urlStr, &createdAt); err == nil {
+				mediaList = append(mediaList, fiber.Map{
+					"id":         id,
+					"type":       mType,
+					"prompt":     prompt,
+					"file_name":  fileName,
+					"file_path":  filePath,
+					"url":        urlStr,
+					"created_at": createdAt,
+				})
+			}
+		}
+		return c.JSON(fiber.Map{"media": mediaList})
+	})
+
+	// Search chat history endpoint
+	app.Get("/history/search", func(c fiber.Ctx) error {
+		q := c.Query("q")
+		limitStr := c.Query("limit")
+		limit := 10
+		if limitStr != "" {
+			if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+				limit = l
+			}
+		}
+		res, err := db.SearchMessages(q, limit)
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		}
+		return c.JSON(fiber.Map{"query": q, "results": res})
+	})
+
+	// Live SQLite stats endpoint
+	app.Get("/stats", func(c fiber.Ctx) error {
+		stats, err := db.GetSystemStats()
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		}
+		stats["active_accounts"] = gemini.GetActiveAccountCount()
+		stats["active_workers"] = gemini.GetActiveWorkerCount()
+		return c.JSON(stats)
 	})
 
 	// Static generated output files (images, videos, music)

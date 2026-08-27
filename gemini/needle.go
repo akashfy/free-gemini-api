@@ -1,3 +1,5 @@
+//go:build cgo
+
 package gemini
 
 /*
@@ -47,20 +49,6 @@ var (
 	globalNeedle *NeedleEngine
 	needleOnce   sync.Once
 )
-
-// NeedleResponse matches Needle 2 raw output
-type NeedleResponse struct {
-	Type          string `json:"type"` // "call" or "respond"
-	Success       bool   `json:"success"`
-	Reasoning     string `json:"reasoning"`
-	Confidence    *float64 `json:"confidence,omitempty"`
-	FunctionCalls []struct {
-		Name      string         `json:"name"`
-		Arguments map[string]any `json:"arguments"`
-	} `json:"function_calls"`
-	Error     any `json:"error,omitempty"`
-	ErrorCode any `json:"error_code,omitempty"`
-}
 
 func getLibFileName() string {
 	switch runtime.GOOS {

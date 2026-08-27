@@ -5,10 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"goapi/db"
 	"goapi/gemini"
 	"io"
 	"log"
 	"mime/multipart"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -97,6 +99,9 @@ func HandleUnifiedChat(c fiber.Ctx) error {
 			return c.Status(400).JSON(fiber.Map{"error": "Invalid request"})
 		}
 		prompt = req.Prompt
+		if prompt == "" {
+			prompt = req.Message
+		}
 		userID = req.UserID
 		newChat = req.NewChat
 		stream = req.Stream
@@ -173,25 +178,15 @@ func HandleUnifiedChat(c fiber.Ctx) error {
 		})
 	}
 
-	// Specialist Pre-Inference Triage (<15ms)
-	triage, _ := TriagePrompt(prompt, nil)
-	finalPrompt := prompt
-	if triage != nil && triage.EnhancedPrompt != "" {
-		finalPrompt = triage.EnhancedPrompt
-	}
-
 	if len(images) > 0 {
-		log.Printf("📸 Image/Media request: %d items, prompt: %s", len(images), finalPrompt)
+		log.Printf("📸 Image/Media request: %d items, prompt: %s", len(images), prompt)
 	}
 
 	resp, err = ExecuteWithFailover(sessionID, func(cl *gemini.GeminiClient) (*gemini.GeminiResponse, error) {
-		if triage != nil && triage.Intent == "music" {
-			return cl.AskWithTool(finalPrompt, "music_gen")
-		}
 		if len(images) > 0 {
-			return cl.AskWithImages(finalPrompt, images)
+			return cl.AskWithImages(prompt, images)
 		}
-		return cl.Ask(finalPrompt)
+		return cl.Ask(prompt)
 	})
 
 	if err != nil {
@@ -226,6 +221,25 @@ func HandleUnifiedChat(c fiber.Ctx) error {
 			}
 		}
 	}
+
+	// Save to SQLite database asynchronously
+	userIP := c.IP()
+	hostStr := c.Host()
+	go func() {
+		db.LogMessage(resp.ConversationID, sessionID, "user", prompt, "gemini-3.7-flash", len(prompt)/4)
+		if resp.Text != "" {
+			db.LogMessage(resp.ConversationID, sessionID, "assistant", resp.Text, "gemini-3.7-flash", len(resp.Text)/4)
+		}
+		for _, imgURL := range resp.Images {
+			fName := filepath.Base(imgURL)
+			db.LogMediaGeneration("image", prompt, fName, "./output/"+fName, fmt.Sprintf("http://%s/output/%s", hostStr, fName), "16:9", resp.ResponseID)
+		}
+		for _, vidURL := range resp.Videos {
+			fName := filepath.Base(vidURL)
+			db.LogMediaGeneration("video", prompt, fName, "./output/"+fName, fmt.Sprintf("http://%s/output/%s", hostStr, fName), "16:9", resp.ResponseID)
+		}
+		db.LogRequest("/chat", "POST", userIP, 200, resp.Elapsed*1000)
+	}()
 
 	return c.JSON(resp)
 }
@@ -420,6 +434,16 @@ func HandleOpenAIChatCompletions(c fiber.Ctx) error {
 			},
 		},
 	}
+
+	// Save to SQLite database asynchronously
+	userIP := c.IP()
+	go func() {
+		db.LogMessage(resp.ConversationID, sessionID, "user", prompt, model, len(prompt)/4)
+		if respContent != "" {
+			db.LogMessage(resp.ConversationID, sessionID, "assistant", respContent, model, len(respContent)/4)
+		}
+		db.LogRequest("/v1/chat/completions", "POST", userIP, 200, resp.Elapsed*1000)
+	}()
 
 	return c.JSON(openAIResp)
 }
