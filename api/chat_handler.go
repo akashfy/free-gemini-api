@@ -173,15 +173,25 @@ func HandleUnifiedChat(c fiber.Ctx) error {
 		})
 	}
 
+	// Specialist Pre-Inference Triage (<15ms)
+	triage, _ := TriagePrompt(prompt, nil)
+	finalPrompt := prompt
+	if triage != nil && triage.EnhancedPrompt != "" {
+		finalPrompt = triage.EnhancedPrompt
+	}
+
 	if len(images) > 0 {
-		log.Printf("📸 Image/Media request: %d items, prompt: %s", len(images), prompt)
+		log.Printf("📸 Image/Media request: %d items, prompt: %s", len(images), finalPrompt)
 	}
 
 	resp, err = ExecuteWithFailover(sessionID, func(cl *gemini.GeminiClient) (*gemini.GeminiResponse, error) {
-		if len(images) > 0 {
-			return cl.AskWithImages(prompt, images)
+		if triage != nil && triage.Intent == "music" {
+			return cl.AskWithTool(finalPrompt, "music_gen")
 		}
-		return cl.Ask(prompt)
+		if len(images) > 0 {
+			return cl.AskWithImages(finalPrompt, images)
+		}
+		return cl.Ask(finalPrompt)
 	})
 
 	if err != nil {
